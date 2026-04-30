@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4 Player Timer</title>
+<title>Timer</title>
 
 <style>
 body {
@@ -13,10 +13,17 @@ body {
     background: #e9e9e9;
 }
 
-#setup {
+/* 画面ブロック */
+.screen {
+    display: none;
     padding: 20px;
 }
 
+.screen.active {
+    display: block;
+}
+
+/* 入力 */
 input {
     font-size: 18px;
     padding: 5px;
@@ -24,12 +31,14 @@ input {
     margin: 5px;
 }
 
+/* ボタン */
 button {
     font-size: 18px;
     padding: 10px 20px;
     margin: 5px;
 }
 
+/* プレイヤー */
 .player {
     margin: 10px auto;
     padding: 10px;
@@ -40,7 +49,6 @@ button {
 
 .time {
     font-size: 40px;
-    font-weight: bold;
 }
 
 .sub {
@@ -60,9 +68,11 @@ button {
 
 <body>
 
-<h2>タイマー設定</h2>
+<!-- ================= 設定画面 ================= -->
+<div id="setup" class="screen active">
 
-<div id="setup">
+    <h2>設定</h2>
+
     P1 <input id="p1" value="P1"><br>
     P2 <input id="p2" value="P2"><br>
     P3 <input id="p3" value="P3"><br>
@@ -74,7 +84,9 @@ button {
     <button id="beginBtn">開始</button>
 </div>
 
-<div id="main" style="display:none;">
+<!-- ================= メイン画面 ================= -->
+<div id="main" class="screen">
+
     <div id="players"></div>
 
     <button id="startBtn">Start</button>
@@ -85,7 +97,14 @@ button {
 <script>
 
 /* =====================
-   Audio（Safari安定版）
+   DOM取得（超重要）
+===================== */
+const setupScreen = document.getElementById("setup");
+const mainScreen  = document.getElementById("main");
+const playersDiv  = document.getElementById("players");
+
+/* =====================
+   Audio（Safari安定）
 ===================== */
 let ctx = null;
 let audioReady = false;
@@ -99,7 +118,7 @@ function initAudio(){
         ctx.resume();
     }
 
-    // 初回解放用の微音
+    // 初回解放音
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     g.gain.value = 0.0001;
@@ -134,12 +153,12 @@ function beep(){
 }
 
 /* =====================
-   状態管理
+   状態
 ===================== */
 let players = [];
 let current = 0;
-
 let running = false;
+
 let startTime = 0;
 let elapsed = 0;
 
@@ -148,13 +167,11 @@ let grace = 5;
 
 let timeoutPlayed = false;
 
-/* DOM */
-const playersDiv = document.getElementById("players");
-
 /* =====================
    計算
 ===================== */
-function remaining(p, i){
+function remain(p,i){
+
     let e = elapsed;
 
     if(running && i === current){
@@ -175,6 +192,21 @@ function format(sec){
 }
 
 /* =====================
+   画面切替（ここが核心）
+===================== */
+function showScreen(name){
+
+    setupScreen.classList.remove("active");
+    mainScreen.classList.remove("active");
+
+    if(name === "setup"){
+        setupScreen.classList.add("active");
+    } else {
+        mainScreen.classList.add("active");
+    }
+}
+
+/* =====================
    初期化
 ===================== */
 beginBtn.onclick = () => {
@@ -191,10 +223,7 @@ beginBtn.onclick = () => {
         {name:p4.value, time:baseTime},
     ];
 
-    setup.style.display = "none";
-    main.style.display = "block";
-
-    render();
+    showScreen("main");
 };
 
 /* =====================
@@ -206,7 +235,7 @@ function render(){
 
     players.forEach((p,i)=>{
 
-        let t = remaining(p,i);
+        let t = remain(p,i);
 
         let div = document.createElement("div");
         div.className = "player";
