@@ -3,249 +3,176 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4 Player Timer</title>
+<title>Timer</title>
 
 <style>
-body {
-    font-family: Helvetica, sans-serif;
-    margin: 0;
-    background: #e9e9e9;
-    text-align: center;
-    font-size: 4vw;
-}
-
-#setup { padding: 5vw 0 20vw 0; }
-
-.inputBox { margin: 3vw; }
-
-input {
-    font-size: 5vw;
-    padding: 2vw;
-    width: 70%;
-}
+body { font-family: sans-serif; text-align: center; }
 
 .player {
-    width: 95%;
-    margin: 4vw auto;
-    padding: 5vw;
-    background: white;
-    border-radius: 4vw;
+    margin: 10px;
+    padding: 10px;
+    background: #fff;
 }
 
-.name { font-size: 6vw; font-weight: bold; }
-.time { font-size: 18vw; font-weight: bold; }
+.time { font-size: 40px; }
+.sub { font-size: 14px; color: gray; }
 
-button {
-    font-size: 5vw;
-    padding: 4vw 6vw;
-    margin: 2vw;
-    border: none;
-    border-radius: 3vw;
-    color: white;
-}
-
-#beginBtn { background: #4CAF50; font-size: 6vw; }
-#startBtn { background: #4CAF50; }
-#stopBtn  { background: #f44336; }
-#nextBtn  { background: #2196F3; }
+.active { background: #ffe08a; }
+.danger { background: #ffb3b3; }
 </style>
 </head>
 
 <body>
 
-<h1>4 Player Timer</h1>
+<h2>設定</h2>
+P1 <input id="p1" value="P1"><br>
+P2 <input id="p2" value="P2"><br>
+P3 <input id="p3" value="P3"><br>
+P4 <input id="p4" value="P4"><br>
 
-<div id="setup">
-    <h2>設定</h2>
+時間(分) <input id="time" value="5"><br>
+猶予(秒) <input id="grace" value="5"><br>
 
-    <div class="inputBox">P1 <input id="p1" value="Player 1"></div>
-    <div class="inputBox">P2 <input id="p2" value="Player 2"></div>
-    <div class="inputBox">P3 <input id="p3" value="Player 3"></div>
-    <div class="inputBox">P4 <input id="p4" value="Player 4"></div>
+<button id="begin">開始</button>
 
-    <div class="inputBox">初期時間（分） <input id="time" value="5"></div>
-    <div class="inputBox">猶予時間（秒） <input id="grace" value="5"></div>
+<div id="main" style="display:none;">
+<div id="players"></div>
 
-    <button id="beginBtn">START</button>
-</div>
-
-<div id="timer" style="display:none;">
-    <div id="players"></div>
-
-    <button id="startBtn">START</button>
-    <button id="stopBtn">STOP</button>
-    <button id="nextBtn">NEXT</button>
+<button id="start">Start</button>
+<button id="stop">Stop</button>
+<button id="next">Next</button>
 </div>
 
 <script>
 
-/* =====================
-   Audio（最終安定版）
-===================== */
-let audioCtx = null;
-let audioReady = false;
+/* ===== 音 ===== */
+let ctx;
+let audioReady=false;
 
 function initAudio(){
     if(audioReady) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    ctx.resume();
 
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    g.gain.value=0.0001;
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime+0.05);
 
-    // Safari対策：必ずresume
-    audioCtx.resume();
-
-    // 初回プライミング（極小音）
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    gain.gain.value = 0.0001;
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.05);
-
-    audioReady = true;
+    audioReady=true;
 }
 
-/* タイムアウト音 */
 function beep(){
-    if(!audioCtx) return;
+    if(!ctx) return;
+    if(ctx.state==="suspended") ctx.resume();
 
-    if(audioCtx.state === "suspended"){
-        audioCtx.resume();
-    }
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.frequency.value = 400;
-    gain.gain.value = 0.2;
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + 1.0);
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.frequency.value=400;
+    g.gain.value=0.2;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime+1);
 }
 
-/* =====================
-   状態
-===================== */
-let players = [];
-let current = 0;
-let running = false;
-let startTime = 0;
-let elapsedTotal = 0;
+/* ===== 状態 ===== */
+let players=[];
+let current=0;
+let running=false;
+let startTime=0;
+let elapsed=0;
 
-let baseTime = 0;
-let grace = 5;
+let base=0;
+let grace=5;
 
-let timeoutPlayed = false;
+let timeoutPlayed=false;
 
-/* =====================
-   計算
-===================== */
-function getRemaining(p, i){
-
-    let elapsed = elapsedTotal;
-
-    if(running && i === current){
-        elapsed += (Date.now() - startTime) / 1000;
+/* ===== 計算 ===== */
+function remain(p,i){
+    let e=elapsed;
+    if(running && i===current){
+        e += (Date.now()-startTime)/1000;
     }
 
-    if(elapsed > grace){
-        return p.time - (elapsed - grace);
+    if(e>grace){
+        return p.time-(e-grace);
     }
-
     return p.time;
 }
 
-function format(sec){
-    sec = Math.max(0, Math.ceil(sec));
-    return String(Math.floor(sec/60)).padStart(2,'0') + ":" +
-           String(sec%60).padStart(2,'0');
+function fmt(s){
+    s=Math.max(0,Math.ceil(s));
+    return String(Math.floor(s/60)).padStart(2,'0')+":"+
+           String(s%60).padStart(2,'0');
 }
 
-/* =====================
-   初期化
-===================== */
-beginBtn.onclick = () => {
+/* ===== 初期化 ===== */
+begin.onclick=()=>{
+    initAudio();
 
-    initAudio(); // ★ここだけで音解放
+    base=parseInt(time.value)*60;
+    grace=parseInt(grace.value);
 
-    baseTime = parseInt(time.value) * 60;
-    grace = parseInt(grace.value);
-
-    players = [
-        {name:p1.value, time:baseTime},
-        {name:p2.value, time:baseTime},
-        {name:p3.value, time:baseTime},
-        {name:p4.value, time:baseTime},
+    players=[
+        {name:p1.value,time:base},
+        {name:p2.value,time:base},
+        {name:p3.value,time:base},
+        {name:p4.value,time:base},
     ];
 
-    setup.style.display = "none";
-    timer.style.display = "block";
-
-    render();
+    main.style.display="block";
 };
 
-/* =====================
-   描画
-===================== */
+/* ===== 描画 ===== */
 function render(){
-
-    const container = document.getElementById("players");
-    container.innerHTML = "";
-
+    playersDiv.innerHTML="";
     players.forEach((p,i)=>{
+        let t=remain(p,i);
+        let div=document.createElement("div");
 
-        let t = getRemaining(p,i);
-        let div = document.createElement("div");
+        div.className="player";
+        if(i===current) div.classList.add("active");
 
-        div.className = "player";
-
-        if(t <= 0 && i === current && !timeoutPlayed){
-            beep();                 // ★確実に1回だけ鳴る
-            timeoutPlayed = true;
+        if(t<=0 && i===current && !timeoutPlayed){
+            beep();
+            timeoutPlayed=true;
+            div.classList.add("danger");
         }
 
-        div.innerHTML = `
-            <div class="name">${p.name}</div>
-            <div class="time">${format(t)}</div>
+        div.innerHTML=`
+        <div>${p.name}</div>
+        <div class="time">${fmt(t)}</div>
+        <div class="sub">経過:${Math.floor(elapsed)}</div>
         `;
 
-        container.appendChild(div);
+        playersDiv.appendChild(div);
     });
 }
 
-/* =====================
-   ループ
-===================== */
+/* ===== ループ ===== */
 function tick(){
     render();
     if(running) requestAnimationFrame(tick);
 }
 
-/* =====================
-   操作
-===================== */
-startBtn.onclick = () => {
-    running = true;
-    startTime = Date.now();
+/* ===== 操作 ===== */
+start.onclick=()=>{
+    running=true;
+    startTime=Date.now();
     tick();
 };
 
-stopBtn.onclick = () => {
-    running = false;
-    elapsedTotal += (Date.now() - startTime)/1000;
+stop.onclick=()=>{
+    running=false;
+    elapsed += (Date.now()-startTime)/1000;
 };
 
-nextBtn.onclick = () => {
-    timeoutPlayed = false;
-    current = (current + 1) % 4;
-    startTime = Date.now();
-    elapsedTotal = 0;
+next.onclick=()=>{
+    elapsed=0;
+    timeoutPlayed=false;
+    current=(current+1)%4;
+    startTime=Date.now();
 };
 
 </script>
