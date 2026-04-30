@@ -14,13 +14,9 @@ body {
     font-size: 4vw;
 }
 
-#setup {
-    padding: 5vw 0 20vw 0;
-}
+#setup { padding: 5vw 0 20vw 0; }
 
-.inputBox {
-    margin: 3vw;
-}
+.inputBox { margin: 3vw; }
 
 input {
     font-size: 5vw;
@@ -36,15 +32,8 @@ input {
     border-radius: 4vw;
 }
 
-.name {
-    font-size: 6vw;
-    font-weight: bold;
-}
-
-.time {
-    font-size: 18vw;
-    font-weight: bold;
-}
+.name { font-size: 6vw; font-weight: bold; }
+.time { font-size: 18vw; font-weight: bold; }
 
 button {
     font-size: 5vw;
@@ -91,27 +80,24 @@ button {
 <script>
 
 /* =====================
-   WebAudio（完全版）
+   Audio（最終安定版）
 ===================== */
 let audioCtx = null;
-let unlocked = false;
+let audioReady = false;
 
-function unlockAudio(){
+function initAudio(){
+    if(audioReady) return;
 
-    if(!audioCtx){
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    if(audioCtx.state === "suspended"){
-        audioCtx.resume();
-    }
+    // Safari対策：必ずresume
+    audioCtx.resume();
 
-    // ★初回プライミング（これが最重要）
+    // 初回プライミング（極小音）
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
 
-    osc.frequency.value = 440;
-    gain.gain.value = 0.0001; // ほぼ無音
+    gain.gain.value = 0.0001;
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
@@ -119,29 +105,16 @@ function unlockAudio(){
     osc.start();
     osc.stop(audioCtx.currentTime + 0.05);
 
-    unlocked = true;
-}
-
-/* 短い音 */
-function beepShort(){
-    if(!audioCtx) return;
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.frequency.value = 800;
-    gain.gain.value = 0.1;
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.1);
+    audioReady = true;
 }
 
 /* タイムアウト音 */
-function beepLong(){
+function beep(){
     if(!audioCtx) return;
+
+    if(audioCtx.state === "suspended"){
+        audioCtx.resume();
+    }
 
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -199,7 +172,7 @@ function format(sec){
 ===================== */
 beginBtn.onclick = () => {
 
-    unlockAudio(); // ★ここで確実に解放
+    initAudio(); // ★ここだけで音解放
 
     baseTime = parseInt(time.value) * 60;
     grace = parseInt(grace.value);
@@ -233,8 +206,8 @@ function render(){
         div.className = "player";
 
         if(t <= 0 && i === current && !timeoutPlayed){
-            beepLong();              // ★確実発火
-            timeoutPlayed = true;    // ★1回だけ
+            beep();                 // ★確実に1回だけ鳴る
+            timeoutPlayed = true;
         }
 
         div.innerHTML = `
@@ -258,9 +231,6 @@ function tick(){
    操作
 ===================== */
 startBtn.onclick = () => {
-
-    unlockAudio(); // ★念押し（Safari対策）
-
     running = true;
     startTime = Date.now();
     tick();
