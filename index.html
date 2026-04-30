@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Timer</title>
+<title>Timer Safe Version</title>
 
 <style>
 body {
@@ -13,7 +13,6 @@ body {
     background: #e9e9e9;
 }
 
-/* 画面ブロック */
 .screen {
     display: none;
     padding: 20px;
@@ -23,7 +22,6 @@ body {
     display: block;
 }
 
-/* 入力 */
 input {
     font-size: 18px;
     padding: 5px;
@@ -31,14 +29,12 @@ input {
     margin: 5px;
 }
 
-/* ボタン */
 button {
     font-size: 18px;
     padding: 10px 20px;
     margin: 5px;
 }
 
-/* プレイヤー */
 .player {
     margin: 10px auto;
     padding: 10px;
@@ -84,7 +80,7 @@ button {
     <button id="beginBtn">開始</button>
 </div>
 
-<!-- ================= メイン画面 ================= -->
+<!-- ================= タイマー画面 ================= -->
 <div id="main" class="screen">
 
     <div id="players"></div>
@@ -96,16 +92,29 @@ button {
 
 <script>
 
-/* =====================
-   DOM取得（超重要）
-===================== */
-const setupScreen = document.getElementById("setup");
-const mainScreen  = document.getElementById("main");
-const playersDiv  = document.getElementById("players");
+/* =========================
+   DOM（必ず最初に固定取得）
+========================= */
+const setup = document.getElementById("setup");
+const main = document.getElementById("main");
+const playersDiv = document.getElementById("players");
 
-/* =====================
+const p1 = document.getElementById("p1");
+const p2 = document.getElementById("p2");
+const p3 = document.getElementById("p3");
+const p4 = document.getElementById("p4");
+
+const timeInput = document.getElementById("time");
+const graceInput = document.getElementById("grace");
+
+const beginBtn = document.getElementById("beginBtn");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+/* =========================
    Audio（Safari安定）
-===================== */
+========================= */
 let ctx = null;
 let audioReady = false;
 
@@ -114,13 +123,11 @@ function initAudio(){
 
     ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-    if(ctx.state === "suspended"){
-        ctx.resume();
-    }
+    ctx.resume();
 
-    // 初回解放音
     const o = ctx.createOscillator();
     const g = ctx.createGain();
+
     g.gain.value = 0.0001;
 
     o.connect(g);
@@ -152,9 +159,9 @@ function beep(){
     o.stop(ctx.currentTime + 0.8);
 }
 
-/* =====================
+/* =========================
    状態
-===================== */
+========================= */
 let players = [];
 let current = 0;
 let running = false;
@@ -167,12 +174,12 @@ let grace = 5;
 
 let timeoutPlayed = false;
 
-/* =====================
-   計算
-===================== */
-function remain(p,i){
+/* =========================
+   計算（安全版）
+========================= */
+function remain(p, i){
 
-    let e = elapsed;
+    let e = elapsed || 0;
 
     if(running && i === current){
         e += (Date.now() - startTime) / 1000;
@@ -186,49 +193,45 @@ function remain(p,i){
 }
 
 function format(sec){
-    sec = Math.max(0, Math.ceil(sec));
+    sec = Math.max(0, Math.ceil(sec || 0));
     return String(Math.floor(sec/60)).padStart(2,'0') + ":" +
            String(sec%60).padStart(2,'0');
 }
 
-/* =====================
-   画面切替（ここが核心）
-===================== */
-function showScreen(name){
+/* =========================
+   画面切替
+========================= */
+function show(screen){
+    setup.classList.remove("active");
+    main.classList.remove("active");
 
-    setupScreen.classList.remove("active");
-    mainScreen.classList.remove("active");
-
-    if(name === "setup"){
-        setupScreen.classList.add("active");
-    } else {
-        mainScreen.classList.add("active");
-    }
+    if(screen === "setup") setup.classList.add("active");
+    else main.classList.add("active");
 }
 
-/* =====================
+/* =========================
    初期化
-===================== */
+========================= */
 beginBtn.onclick = () => {
 
     initAudio();
 
-    baseTime = parseInt(time.value) * 60;
-    grace = parseInt(grace.value);
+    baseTime = parseInt(timeInput.value || "0") * 60;
+    grace = parseInt(graceInput.value || "0");
 
     players = [
-        {name:p1.value, time:baseTime},
-        {name:p2.value, time:baseTime},
-        {name:p3.value, time:baseTime},
-        {name:p4.value, time:baseTime},
+        {name:p1.value || "P1", time:baseTime},
+        {name:p2.value || "P2", time:baseTime},
+        {name:p3.value || "P3", time:baseTime},
+        {name:p4.value || "P4", time:baseTime},
     ];
 
-    showScreen("main");
+    show("main");
 };
 
-/* =====================
+/* =========================
    描画
-===================== */
+========================= */
 function render(){
 
     playersDiv.innerHTML = "";
@@ -254,24 +257,24 @@ function render(){
         div.innerHTML = `
             <div>${p.name}</div>
             <div class="time">${format(t)}</div>
-            <div class="sub">経過:${Math.floor(elapsed)}</div>
+            <div class="sub">経過:${Math.floor(elapsed || 0)}</div>
         `;
 
         playersDiv.appendChild(div);
     });
 }
 
-/* =====================
+/* =========================
    ループ
-===================== */
+========================= */
 function tick(){
     render();
     if(running) requestAnimationFrame(tick);
 }
 
-/* =====================
+/* =========================
    操作
-===================== */
+========================= */
 startBtn.onclick = () => {
     running = true;
     startTime = Date.now();
