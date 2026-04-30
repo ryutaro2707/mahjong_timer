@@ -91,27 +91,38 @@ button {
 <script>
 
 /* =====================
-   WebAudio（Safari対策）
+   WebAudio（完全版）
 ===================== */
-let audioCtx;
+let audioCtx = null;
 let unlocked = false;
 
 function unlockAudio(){
-    if(unlocked) return;
 
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(!audioCtx){
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
-    // 無音を1回鳴らして解放
-    const buffer = audioCtx.createBuffer(1, 1, 22050);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buffer;
-    src.connect(audioCtx.destination);
-    src.start(0);
+    if(audioCtx.state === "suspended"){
+        audioCtx.resume();
+    }
+
+    // ★初回プライミング（これが最重要）
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.frequency.value = 440;
+    gain.gain.value = 0.0001; // ほぼ無音
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
 
     unlocked = true;
 }
 
-/* ビープ音（短） */
+/* 短い音 */
 function beepShort(){
     if(!audioCtx) return;
 
@@ -128,7 +139,7 @@ function beepShort(){
     osc.stop(audioCtx.currentTime + 0.1);
 }
 
-/* ビープ音（長） */
+/* タイムアウト音 */
 function beepLong(){
     if(!audioCtx) return;
 
@@ -136,13 +147,13 @@ function beepLong(){
     const gain = audioCtx.createGain();
 
     osc.frequency.value = 400;
-    gain.gain.value = 0.15;
+    gain.gain.value = 0.2;
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
 
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.8);
+    osc.stop(audioCtx.currentTime + 1.0);
 }
 
 /* =====================
@@ -188,7 +199,7 @@ function format(sec){
 ===================== */
 beginBtn.onclick = () => {
 
-    unlockAudio(); // ★ここ重要
+    unlockAudio(); // ★ここで確実に解放
 
     baseTime = parseInt(time.value) * 60;
     grace = parseInt(grace.value);
@@ -222,8 +233,8 @@ function render(){
         div.className = "player";
 
         if(t <= 0 && i === current && !timeoutPlayed){
-            beepLong();
-            timeoutPlayed = true;
+            beepLong();              // ★確実発火
+            timeoutPlayed = true;    // ★1回だけ
         }
 
         div.innerHTML = `
@@ -247,7 +258,9 @@ function tick(){
    操作
 ===================== */
 startBtn.onclick = () => {
-    unlockAudio(); // ★念のため
+
+    unlockAudio(); // ★念押し（Safari対策）
+
     running = true;
     startTime = Date.now();
     tick();
