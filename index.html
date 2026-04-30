@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>4 Player Timer</title>
 
 <style>
@@ -10,81 +11,54 @@ body {
     margin: 0;
     background: #e9e9e9;
     text-align: center;
+    font-size: 4vw;
 }
 
-h1 { margin: 10px; }
+#setup {
+    padding: 5vw 0 20vw 0;
+}
 
-/* ---------------- 設定 ---------------- */
-#setup { padding-top: 40px; }
-
-.inputBox { margin: 10px; }
+.inputBox {
+    margin: 3vw;
+}
 
 input {
-    font-size: 18px;
-    padding: 8px;
-    width: 200px;
+    font-size: 5vw;
+    padding: 2vw;
+    width: 70%;
 }
 
-/* ---------------- タイマー ---------------- */
 .player {
-    width: 80%;
-    margin: 10px auto;
-    padding: 15px;
+    width: 95%;
+    margin: 4vw auto;
+    padding: 5vw;
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-    transition: 0.2s;
+    border-radius: 4vw;
 }
 
 .name {
-    font-size: 22px;
+    font-size: 6vw;
     font-weight: bold;
 }
 
 .time {
-    font-size: 60px;
+    font-size: 18vw;
     font-weight: bold;
 }
 
-.subinfo {
-    font-size: 14px;
-    color: #555;
-    margin-top: 4px;
-}
-
-/* 色 */
-.active {
-    background: #fff7a8;
-    transform: scale(1.03);
-    border: 2px solid #f0c000;
-}
-
-.warning {
-    background: #ffe08a !important;
-}
-
-.danger {
-    background: #ffb3b3 !important;
-}
-
-/* ---------------- ボタン ---------------- */
 button {
-    font-size: 18px;
-    padding: 12px 20px;
-    margin: 8px;
+    font-size: 5vw;
+    padding: 4vw 6vw;
+    margin: 2vw;
     border: none;
-    border-radius: 10px;
+    border-radius: 3vw;
     color: white;
-    cursor: pointer;
 }
 
-#beginBtn { background: #4CAF50; font-size: 22px; }
+#beginBtn { background: #4CAF50; font-size: 6vw; }
 #startBtn { background: #4CAF50; }
 #stopBtn  { background: #f44336; }
 #nextBtn  { background: #2196F3; }
-#fullBtn  { background: #333; }
-
-.controls { margin: 20px; }
 </style>
 </head>
 
@@ -92,7 +66,6 @@ button {
 
 <h1>4 Player Timer</h1>
 
-<!-- ================= 設定 ================= -->
 <div id="setup">
     <h2>設定</h2>
 
@@ -107,37 +80,74 @@ button {
     <button id="beginBtn">START</button>
 </div>
 
-<!-- ================= 本体 ================= -->
 <div id="timer" style="display:none;">
     <div id="players"></div>
 
-    <div class="controls">
-        <button id="startBtn">START</button>
-        <button id="stopBtn">STOP</button>
-        <button id="nextBtn">NEXT</button>
-        <button id="fullBtn">FULLSCREEN</button>
-    </div>
+    <button id="startBtn">START</button>
+    <button id="stopBtn">STOP</button>
+    <button id="nextBtn">NEXT</button>
 </div>
 
 <script>
 
-/* ---------------- 音 ---------------- */
-let beepShort = new Audio("beep_short.wav");
-let beepLong  = new Audio("beep_long.wav");
+/* =====================
+   WebAudio（Safari対策）
+===================== */
+let audioCtx;
+let unlocked = false;
 
-/* ---------------- 要素 ---------------- */
-const elSetup = document.getElementById("setup");
-const elTimer = document.getElementById("timer");
-const elPlayers = document.getElementById("players");
+function unlockAudio(){
+    if(unlocked) return;
 
-const elP1 = document.getElementById("p1");
-const elP2 = document.getElementById("p2");
-const elP3 = document.getElementById("p3");
-const elP4 = document.getElementById("p4");
-const elTime = document.getElementById("time");
-const elGrace = document.getElementById("grace");
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-/* ---------------- 状態 ---------------- */
+    // 無音を1回鳴らして解放
+    const buffer = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioCtx.destination);
+    src.start(0);
+
+    unlocked = true;
+}
+
+/* ビープ音（短） */
+function beepShort(){
+    if(!audioCtx) return;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.frequency.value = 800;
+    gain.gain.value = 0.1;
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+/* ビープ音（長） */
+function beepLong(){
+    if(!audioCtx) return;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.frequency.value = 400;
+    gain.gain.value = 0.15;
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.8);
+}
+
+/* =====================
+   状態
+===================== */
 let players = [];
 let current = 0;
 let running = false;
@@ -147,20 +157,17 @@ let elapsedTotal = 0;
 let baseTime = 0;
 let grace = 5;
 
-let countdownActive = false;
-let lastBeepTime = 0;
+let timeoutPlayed = false;
 
-/* ---------------- 時間計算 ---------------- */
+/* =====================
+   計算
+===================== */
 function getRemaining(p, i){
 
     let elapsed = elapsedTotal;
 
     if(running && i === current){
         elapsed += (Date.now() - startTime) / 1000;
-    }
-
-    if(p.state === "penalty"){
-        return Math.max(0, grace - elapsed);
     }
 
     if(elapsed > grace){
@@ -170,153 +177,92 @@ function getRemaining(p, i){
     return p.time;
 }
 
-/* ---------------- フォーマット（★ここが修正ポイント） ---------------- */
 function format(sec){
-
-    sec = Math.max(0, Math.ceil(sec)); // ★floor → ceil に変更
-
+    sec = Math.max(0, Math.ceil(sec));
     return String(Math.floor(sec/60)).padStart(2,'0') + ":" +
            String(sec%60).padStart(2,'0');
 }
 
-/* ---------------- 初期化 ---------------- */
-document.getElementById("beginBtn").onclick = () => {
+/* =====================
+   初期化
+===================== */
+beginBtn.onclick = () => {
 
-    baseTime = parseInt(elTime.value) * 60;
-    grace = parseInt(elGrace.value);
+    unlockAudio(); // ★ここ重要
 
-    if(isNaN(baseTime)) baseTime = 300;
-    if(isNaN(grace)) grace = 5;
+    baseTime = parseInt(time.value) * 60;
+    grace = parseInt(grace.value);
 
     players = [
-        {name:elP1.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:elP2.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:elP3.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:elP4.value, time:baseTime, state:"normal", gracePlayed:false},
+        {name:p1.value, time:baseTime},
+        {name:p2.value, time:baseTime},
+        {name:p3.value, time:baseTime},
+        {name:p4.value, time:baseTime},
     ];
 
-    elSetup.style.display = "none";
-    elTimer.style.display = "block";
+    setup.style.display = "none";
+    timer.style.display = "block";
 
     render();
 };
 
-/* ---------------- 描画 ---------------- */
+/* =====================
+   描画
+===================== */
 function render(){
 
-    elPlayers.innerHTML = "";
+    const container = document.getElementById("players");
+    container.innerHTML = "";
 
     players.forEach((p,i)=>{
 
+        let t = getRemaining(p,i);
         let div = document.createElement("div");
-
-        let t = getRemaining(p, i);
-        if(isNaN(t)) t = 0;
 
         div.className = "player";
 
-        if(i === current && running){
-            if(t <= 1){
-                div.classList.add("danger");
-            }else if(t <= grace){
-                div.classList.add("warning");
-            }else{
-                div.classList.add("active");
-            }
-        }
-
-        let elapsed = elapsedTotal;
-        if(running && i === current){
-            elapsed += (Date.now() - startTime)/1000;
-        }
-
-        let sub = "";
-        if(i === current && running && p.state !== "penalty" && elapsed < grace){
-            sub = "+" + (grace - elapsed).toFixed(1) + "s";
-        }
-
-        if(i === current && p.state !== "penalty" && elapsed >= grace && !p.gracePlayed){
-            beepShort.play();
-            p.gracePlayed = true;
-        }
-
-        if(i === current && running && t <= 1){
-            countdownActive = true;
+        if(t <= 0 && i === current && !timeoutPlayed){
+            beepLong();
+            timeoutPlayed = true;
         }
 
         div.innerHTML = `
             <div class="name">${p.name}</div>
             <div class="time">${format(t)}</div>
-            <div class="subinfo">${sub}</div>
         `;
 
-        elPlayers.appendChild(div);
+        container.appendChild(div);
     });
-
-    if(countdownActive){
-        let now = Date.now();
-        if(now - lastBeepTime > 400){
-            beepLong.currentTime = 0;
-            beepLong.play();
-            lastBeepTime = now;
-        }
-    }
 }
 
-/* ---------------- ループ ---------------- */
+/* =====================
+   ループ
+===================== */
 function tick(){
     render();
     if(running) requestAnimationFrame(tick);
 }
 
-/* ---------------- 操作 ---------------- */
-document.getElementById("startBtn").onclick = ()=>{
-    if(!running){
-        running = true;
-        startTime = Date.now();
-        tick();
-    }
+/* =====================
+   操作
+===================== */
+startBtn.onclick = () => {
+    unlockAudio(); // ★念のため
+    running = true;
+    startTime = Date.now();
+    tick();
 };
 
-document.getElementById("stopBtn").onclick = ()=>{
+stopBtn.onclick = () => {
     running = false;
-    countdownActive = false;
     elapsedTotal += (Date.now() - startTime)/1000;
 };
 
-document.getElementById("nextBtn").onclick = ()=>{
-
-    countdownActive = false;
-
-    let now = elapsedTotal;
-    if(running){
-        now += (Date.now() - startTime)/1000;
-    }
-
-    let p = players[current];
-
-    if(p.state !== "penalty"){
-        if(now > grace){
-            p.time -= (now - grace);
-        }
-    }else{
-        p.time -= now;
-    }
-
-    if(p.time <= 0){
-        p.time = grace;
-        p.state = "penalty";
-    }
-
+nextBtn.onclick = () => {
+    timeoutPlayed = false;
     current = (current + 1) % 4;
     startTime = Date.now();
     elapsedTotal = 0;
-
-    players[current].gracePlayed = false;
-};
-
-document.getElementById("fullBtn").onclick = ()=>{
-    document.documentElement.requestFullscreen();
 };
 
 </script>
