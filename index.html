@@ -8,17 +8,12 @@
 <style>
 body { font-family: sans-serif; text-align: center; }
 
-.player {
-    margin: 10px;
-    padding: 10px;
-    background: #fff;
-}
+.player { margin:10px; padding:10px; background:#fff; }
+.time { font-size:40px; }
+.sub { font-size:14px; color:gray; }
 
-.time { font-size: 40px; }
-.sub { font-size: 14px; color: gray; }
-
-.active { background: #ffe08a; }
-.danger { background: #ffb3b3; }
+.active { background:#ffe08a; }
+.danger { background:#ffb3b3; }
 </style>
 </head>
 
@@ -70,10 +65,7 @@ function initAudio(){
 
 function beep(){
     if(!ctx) return;
-
-    if(ctx.state==="suspended"){
-        ctx.resume();
-    }
+    if(ctx.state==="suspended") ctx.resume();
 
     const o=ctx.createOscillator();
     const g=ctx.createGain();
@@ -101,35 +93,36 @@ let grace=5;
 
 let timeoutPlayed=false;
 
+/* ===== DOM ===== */
+const playersDiv = document.getElementById("players");
+
 /* ===== 計算 ===== */
 function remain(p,i){
-
-    let e = elapsed;
+    let e=elapsed;
 
     if(running && i===current){
         e += (Date.now()-startTime)/1000;
     }
 
-    if(e > grace){
-        return p.time - (e - grace);
+    if(e>grace){
+        return p.time-(e-grace);
     }
 
     return p.time;
 }
 
 function fmt(s){
-    s = Math.max(0, Math.ceil(s));
-    return String(Math.floor(s/60)).padStart(2,'0') + ":" +
+    s=Math.max(0,Math.ceil(s));
+    return String(Math.floor(s/60)).padStart(2,'0')+":"+
            String(s%60).padStart(2,'0');
 }
 
 /* ===== 初期化 ===== */
 begin.onclick=()=>{
-
     initAudio();
 
-    base = parseInt(time.value)*60;
-    grace = parseInt(grace.value);
+    base=parseInt(time.value)*60;
+    grace=parseInt(grace.value);
 
     players=[
         {name:p1.value,time:base},
@@ -144,11 +137,11 @@ begin.onclick=()=>{
 /* ===== 描画 ===== */
 function render(){
 
-    players.innerHTML="";
+    playersDiv.innerHTML="";
 
     players.forEach((p,i)=>{
 
-        let t = remain(p,i);
+        let t=remain(p,i);
 
         let div=document.createElement("div");
         div.className="player";
@@ -170,7 +163,7 @@ function render(){
         <div class="sub">経過:${Math.floor(elapsed)}</div>
         `;
 
-        players.appendChild(div);
+        playersDiv.appendChild(div);
     });
 }
 
