@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>4 Player Timer</title>
+
+<style>
+body {
+    font-family: Helvetica, sans-serif;
+    margin: 0;
+    background: #e9e9e9;
+    text-align: center;
+}
+
+h1 { margin: 10px; }
+
+/* ---------------- 設定 ---------------- */
+#setup { padding-top: 40px; }
+
+.inputBox { margin: 10px; }
+
+input {
+    font-size: 18px;
+    padding: 8px;
+    width: 200px;
+}
+
+/* ---------------- タイマー ---------------- */
+.player {
+    width: 80%;
+    margin: 10px auto;
+    padding: 15px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+    transition: 0.2s;
+}
+
+.name {
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.time {
+    font-size: 60px;
+    font-weight: bold;
+}
+
+.subinfo {
+    font-size: 14px;
+    color: #555;
+    margin-top: 4px;
+}
+
+/* 色 */
+.active {
+    background: #fff7a8;
+    transform: scale(1.03);
+    border: 2px solid #f0c000;
+}
+
+.warning {
+    background: #ffe08a !important;
+}
+
+.danger {
+    background: #ffb3b3 !important;
+}
+
+/* ---------------- ボタン ---------------- */
+button {
+    font-size: 18px;
+    padding: 12px 20px;
+    margin: 8px;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    cursor: pointer;
+}
+
+#beginBtn { background: #4CAF50; font-size: 22px; }
+#startBtn { background: #4CAF50; }
+#stopBtn  { background: #f44336; }
+#nextBtn  { background: #2196F3; }
+#fullBtn  { background: #333; }
+
+.controls { margin: 20px; }
+</style>
+</head>
+
+<body>
+
+<h1>4 Player Timer</h1>
+
+<!-- ================= 設定 ================= -->
+<div id="setup">
+    <h2>設定</h2>
+
+    <div class="inputBox">P1 <input id="p1" value="Player 1"></div>
+    <div class="inputBox">P2 <input id="p2" value="Player 2"></div>
+    <div class="inputBox">P3 <input id="p3" value="Player 3"></div>
+    <div class="inputBox">P4 <input id="p4" value="Player 4"></div>
+
+    <div class="inputBox">初期時間（分） <input id="time" value="5"></div>
+    <div class="inputBox">猶予時間（秒） <input id="grace" value="5"></div>
+
+    <button id="beginBtn">START</button>
+</div>
+
+<!-- ================= 本体 ================= -->
+<div id="timer" style="display:none;">
+    <div id="players"></div>
+
+    <div class="controls">
+        <button id="startBtn">START</button>
+        <button id="stopBtn">STOP</button>
+        <button id="nextBtn">NEXT</button>
+        <button id="fullBtn">FULLSCREEN</button>
+    </div>
+</div>
+
+<script>
+
+/* ---------------- 音 ---------------- */
+let beepShort = new Audio("beep_short.wav");
+let beepLong  = new Audio("beep_long.wav");
+
+/* ---------------- 要素 ---------------- */
+const elSetup = document.getElementById("setup");
+const elTimer = document.getElementById("timer");
+const elPlayers = document.getElementById("players");
+
+const elP1 = document.getElementById("p1");
+const elP2 = document.getElementById("p2");
+const elP3 = document.getElementById("p3");
+const elP4 = document.getElementById("p4");
+const elTime = document.getElementById("time");
+const elGrace = document.getElementById("grace");
+
+/* ---------------- 状態 ---------------- */
+let players = [];
+let current = 0;
+let running = false;
+let startTime = 0;
+let elapsedTotal = 0;
+
+let baseTime = 0;
+let grace = 5;
+
+let countdownActive = false;
+let lastBeepTime = 0;
+
+/* ---------------- 時間計算 ---------------- */
+function getRemaining(p, i){
+
+    let elapsed = elapsedTotal;
+
+    if(running && i === current){
+        elapsed += (Date.now() - startTime) / 1000;
+    }
+
+    if(p.state === "penalty"){
+        return Math.max(0, grace - elapsed);
+    }
+
+    if(elapsed > grace){
+        return p.time - (elapsed - grace);
+    }
+
+    return p.time;
+}
+
+/* ---------------- フォーマット（★ここが修正ポイント） ---------------- */
+function format(sec){
+
+    sec = Math.max(0, Math.ceil(sec)); // ★floor → ceil に変更
+
+    return String(Math.floor(sec/60)).padStart(2,'0') + ":" +
+           String(sec%60).padStart(2,'0');
+}
+
+/* ---------------- 初期化 ---------------- */
+document.getElementById("beginBtn").onclick = () => {
+
+    baseTime = parseInt(elTime.value) * 60;
+    grace = parseInt(elGrace.value);
+
+    if(isNaN(baseTime)) baseTime = 300;
+    if(isNaN(grace)) grace = 5;
+
+    players = [
+        {name:elP1.value, time:baseTime, state:"normal", gracePlayed:false},
+        {name:elP2.value, time:baseTime, state:"normal", gracePlayed:false},
+        {name:elP3.value, time:baseTime, state:"normal", gracePlayed:false},
+        {name:elP4.value, time:baseTime, state:"normal", gracePlayed:false},
+    ];
+
+    elSetup.style.display = "none";
+    elTimer.style.display = "block";
+
+    render();
+};
+
+/* ---------------- 描画 ---------------- */
+function render(){
+
+    elPlayers.innerHTML = "";
+
+    players.forEach((p,i)=>{
+
+        let div = document.createElement("div");
+
+        let t = getRemaining(p, i);
+        if(isNaN(t)) t = 0;
+
+        div.className = "player";
+
+        if(i === current && running){
+            if(t <= 1){
+                div.classList.add("danger");
+            }else if(t <= grace){
+                div.classList.add("warning");
+            }else{
+                div.classList.add("active");
+            }
+        }
+
+        let elapsed = elapsedTotal;
+        if(running && i === current){
+            elapsed += (Date.now() - startTime)/1000;
+        }
+
+        let sub = "";
+        if(i === current && running && p.state !== "penalty" && elapsed < grace){
+            sub = "+" + (grace - elapsed).toFixed(1) + "s";
+        }
+
+        if(i === current && p.state !== "penalty" && elapsed >= grace && !p.gracePlayed){
+            beepShort.play();
+            p.gracePlayed = true;
+        }
+
+        if(i === current && running && t <= 1){
+            countdownActive = true;
+        }
+
+        div.innerHTML = `
+            <div class="name">${p.name}</div>
+            <div class="time">${format(t)}</div>
+            <div class="subinfo">${sub}</div>
+        `;
+
+        elPlayers.appendChild(div);
+    });
+
+    if(countdownActive){
+        let now = Date.now();
+        if(now - lastBeepTime > 400){
+            beepLong.currentTime = 0;
+            beepLong.play();
+            lastBeepTime = now;
+        }
+    }
+}
+
+/* ---------------- ループ ---------------- */
+function tick(){
+    render();
+    if(running) requestAnimationFrame(tick);
+}
+
+/* ---------------- 操作 ---------------- */
+document.getElementById("startBtn").onclick = ()=>{
+    if(!running){
+        running = true;
+        startTime = Date.now();
+        tick();
+    }
+};
+
+document.getElementById("stopBtn").onclick = ()=>{
+    running = false;
+    countdownActive = false;
+    elapsedTotal += (Date.now() - startTime)/1000;
+};
+
+document.getElementById("nextBtn").onclick = ()=>{
+
+    countdownActive = false;
+
+    let now = elapsedTotal;
+    if(running){
+        now += (Date.now() - startTime)/1000;
+    }
+
+    let p = players[current];
+
+    if(p.state !== "penalty"){
+        if(now > grace){
+            p.time -= (now - grace);
+        }
+    }else{
+        p.time -= now;
+    }
+
+    if(p.time <= 0){
+        p.time = grace;
+        p.state = "penalty";
+    }
+
+    current = (current + 1) % 4;
+    startTime = Date.now();
+    elapsedTotal = 0;
+
+    players[current].gracePlayed = false;
+};
+
+document.getElementById("fullBtn").onclick = ()=>{
+    document.documentElement.requestFullscreen();
+};
+
+</script>
+
+</body>
+</html>
