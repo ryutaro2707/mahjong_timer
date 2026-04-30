@@ -45,33 +45,45 @@ P4 <input id="p4" value="P4"><br>
 
 <script>
 
-/* ===== 音 ===== */
-let ctx;
+/* ===== Audio ===== */
+let ctx=null;
 let audioReady=false;
 
 function initAudio(){
     if(audioReady) return;
+
     ctx = new (window.AudioContext||window.webkitAudioContext)();
     ctx.resume();
 
     const o=ctx.createOscillator();
     const g=ctx.createGain();
     g.gain.value=0.0001;
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime+0.05);
+
+    o.connect(g);
+    g.connect(ctx.destination);
+
+    o.start();
+    o.stop(ctx.currentTime+0.05);
 
     audioReady=true;
 }
 
 function beep(){
     if(!ctx) return;
-    if(ctx.state==="suspended") ctx.resume();
+
+    if(ctx.state==="suspended"){
+        ctx.resume();
+    }
 
     const o=ctx.createOscillator();
     const g=ctx.createGain();
+
     o.frequency.value=400;
     g.gain.value=0.2;
-    o.connect(g); g.connect(ctx.destination);
+
+    o.connect(g);
+    g.connect(ctx.destination);
+
     o.start();
     o.stop(ctx.currentTime+1);
 }
@@ -79,6 +91,7 @@ function beep(){
 /* ===== 状態 ===== */
 let players=[];
 let current=0;
+
 let running=false;
 let startTime=0;
 let elapsed=0;
@@ -90,29 +103,33 @@ let timeoutPlayed=false;
 
 /* ===== 計算 ===== */
 function remain(p,i){
-    let e=elapsed;
+
+    let e = elapsed;
+
     if(running && i===current){
         e += (Date.now()-startTime)/1000;
     }
 
-    if(e>grace){
-        return p.time-(e-grace);
+    if(e > grace){
+        return p.time - (e - grace);
     }
+
     return p.time;
 }
 
 function fmt(s){
-    s=Math.max(0,Math.ceil(s));
-    return String(Math.floor(s/60)).padStart(2,'0')+":"+
+    s = Math.max(0, Math.ceil(s));
+    return String(Math.floor(s/60)).padStart(2,'0') + ":" +
            String(s%60).padStart(2,'0');
 }
 
 /* ===== 初期化 ===== */
 begin.onclick=()=>{
+
     initAudio();
 
-    base=parseInt(time.value)*60;
-    grace=parseInt(grace.value);
+    base = parseInt(time.value)*60;
+    grace = parseInt(grace.value);
 
     players=[
         {name:p1.value,time:base},
@@ -126,18 +143,25 @@ begin.onclick=()=>{
 
 /* ===== 描画 ===== */
 function render(){
-    playersDiv.innerHTML="";
-    players.forEach((p,i)=>{
-        let t=remain(p,i);
-        let div=document.createElement("div");
 
+    players.innerHTML="";
+
+    players.forEach((p,i)=>{
+
+        let t = remain(p,i);
+
+        let div=document.createElement("div");
         div.className="player";
+
         if(i===current) div.classList.add("active");
 
-        if(t<=0 && i===current && !timeoutPlayed){
-            beep();
-            timeoutPlayed=true;
+        if(t<=0 && i===current){
             div.classList.add("danger");
+
+            if(!timeoutPlayed){
+                beep();
+                timeoutPlayed=true;
+            }
         }
 
         div.innerHTML=`
@@ -146,7 +170,7 @@ function render(){
         <div class="sub">経過:${Math.floor(elapsed)}</div>
         `;
 
-        playersDiv.appendChild(div);
+        players.appendChild(div);
     });
 }
 
