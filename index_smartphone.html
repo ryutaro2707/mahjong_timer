@@ -2,17 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-
-<!-- 📱 スマホ必須 -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>4 Player Timer (Debug)</title>
+<title>4 Player Timer</title>
 
 <style>
-
-/* =====================
-   全体
-===================== */
 body {
     font-family: Helvetica, sans-serif;
     margin: 0;
@@ -21,9 +15,7 @@ body {
     font-size: 4vw;
 }
 
-/* =====================
-   設定画面
-===================== */
+/* ===== 設定 ===== */
 #setup {
     padding: 5vw 0 20vw 0;
 }
@@ -38,9 +30,7 @@ input {
     width: 70%;
 }
 
-/* =====================
-   プレイヤー
-===================== */
+/* ===== プレイヤー ===== */
 .player {
     width: 95%;
     margin: 4vw auto;
@@ -61,19 +51,12 @@ input {
     line-height: 1;
 }
 
-.subinfo {
-    font-size: 4vw;
-    color: #555;
-}
-
-/* 状態 */
+/* 状態色 */
 .active { background: #fff7a8; }
 .warning { background: #ffe08a !important; }
 .danger { background: #ffb3b3 !important; }
 
-/* =====================
-   ボタン
-===================== */
+/* ===== ボタン ===== */
 button {
     font-size: 5vw;
     padding: 4vw 6vw;
@@ -92,7 +75,6 @@ button {
 .controls {
     margin: 5vw 0;
 }
-
 </style>
 </head>
 
@@ -100,7 +82,7 @@ button {
 
 <h1>4 Player Timer</h1>
 
-<!-- ================= 設定 ================= -->
+<!-- ===== 設定画面 ===== -->
 <div id="setup">
 
     <h2>設定</h2>
@@ -116,7 +98,7 @@ button {
     <button id="beginBtn">START</button>
 </div>
 
-<!-- ================= メイン ================= -->
+<!-- ===== メイン ===== -->
 <div id="timer" style="display:none;">
 
     <div id="players"></div>
@@ -129,41 +111,20 @@ button {
     </div>
 </div>
 
-<!-- ================= デバッグ表示 ================= -->
-<div id="debug" style="
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    max-height: 25vh;
-    overflow: auto;
-    background: rgba(0,0,0,0.85);
-    color: lime;
-    font-size: 12px;
-    text-align: left;
-    padding: 5px;
-    z-index: 9999;
-"></div>
-
 <script>
-
-/* =====================
-   デバッグ関数
-===================== */
-function log(msg){
-    console.log(msg);
-    document.getElementById("debug").innerHTML += msg + "<br>";
-}
-
-window.onerror = function(message, source, lineno){
-    log("❌ ERROR: " + message + " (line " + lineno + ")");
-};
 
 /* =====================
    音
 ===================== */
-let beepShort = new Audio("beep_short.wav");
-let beepLong  = new Audio("beep_long.wav");
+const beepShort = new Audio("beep_short.wav");
+const beepLong  = new Audio("beep_long.wav");
+
+/* 安全再生 */
+function playSafe(audio){
+    if(!audio) return;
+    audio.currentTime = 0;
+    audio.play().catch(()=>{});
+}
 
 /* =====================
    状態
@@ -177,11 +138,11 @@ let elapsedTotal = 0;
 let baseTime = 0;
 let grace = 5;
 
-let countdownActive = false;
-let lastBeepTime = 0;
+/* ★重要：タイムアウト制御 */
+let timeoutPlayed = false;
 
 /* =====================
-   計算
+   時間計算
 ===================== */
 function getRemaining(p, i){
 
@@ -189,10 +150,6 @@ function getRemaining(p, i){
 
     if(running && i === current){
         elapsed += (Date.now() - startTime) / 1000;
-    }
-
-    if(p.state === "penalty"){
-        return Math.max(0, grace - elapsed);
     }
 
     if(elapsed > grace){
@@ -216,16 +173,14 @@ function format(sec){
 ===================== */
 beginBtn.onclick = () => {
 
-    log("START pressed");
-
     baseTime = parseInt(time.value) * 60;
     grace = parseInt(grace.value);
 
     players = [
-        {name:p1.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:p2.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:p3.value, time:baseTime, state:"normal", gracePlayed:false},
-        {name:p4.value, time:baseTime, state:"normal", gracePlayed:false},
+        {name:p1.value, time:baseTime},
+        {name:p2.value, time:baseTime},
+        {name:p3.value, time:baseTime},
+        {name:p4.value, time:baseTime},
     ];
 
     setup.style.display = "none";
@@ -239,22 +194,25 @@ beginBtn.onclick = () => {
 ===================== */
 function render(){
 
-    let container = document.getElementById("players");
-    if(!container){
-        log("❌ players container not found");
-        return;
-    }
-
+    const container = document.getElementById("players");
     container.innerHTML = "";
 
     players.forEach((p,i)=>{
 
+        let t = getRemaining(p,i);
         let div = document.createElement("div");
 
-        let t = getRemaining(p,i);
-        if(isNaN(t)) t = 0;
-
         div.className = "player";
+
+        if(t <= 0){
+            div.classList.add("danger");
+
+            /* ★タイムアウト音（確実に1回だけ） */
+            if(i === current && !timeoutPlayed){
+                playSafe(beepLong);
+                timeoutPlayed = true;
+            }
+        }
 
         div.innerHTML = `
             <div class="name">${p.name}</div>
@@ -263,7 +221,6 @@ function render(){
 
         container.appendChild(div);
     });
-
 }
 
 /* =====================
@@ -278,20 +235,25 @@ function tick(){
    操作
 ===================== */
 startBtn.onclick = () => {
-    log("START game");
+
+    /* 音アンロック */
+    playSafe(beepShort);
+
     running = true;
     startTime = Date.now();
     tick();
 };
 
 stopBtn.onclick = () => {
-    log("STOP");
     running = false;
     elapsedTotal += (Date.now() - startTime)/1000;
 };
 
 nextBtn.onclick = () => {
-    log("NEXT");
+
+    /* 次ターンでリセット */
+    timeoutPlayed = false;
+
     current = (current + 1) % 4;
     startTime = Date.now();
     elapsedTotal = 0;
